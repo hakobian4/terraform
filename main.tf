@@ -1,61 +1,121 @@
-# there are 2 ways to set environment variables
-# 1) export variable as a machine environment variable: AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID
-# 2) export variable as a terraform environment variable. variable name has to be started at "TF_VAR_" (TF_VAR_avail_zone)
-
-
-provider "aws" {}
-
-# there are 3 ways to pass variable
-# 1) pass it after running "terraform apply" command
-# 2) pass it in "terraform apply" command. in this case 'terraform apply -var "subnet_cidr_block=10.0.20.0/24"'
-# 3) define variable in "terraform.tfvars" file: this is the most efficient and correct way
-# NOTE: if variables file name is not "terraform.tfvars" it has to be passed to apply command like this:
-#       "terraform apply -var-file terraform-dev.tfvars"
-variable "cidr_blocks" {
-  description = "cidr blocks and name tags for vpc and subnets"
-  type = list(object({
-    cidr_block=string
-    name=string
-  }))
+provider "aws" {
+  region = "eu-west-3"
 }
 
-resource "aws_vpc" "development-vpc" {
-  cidr_block = var.cidr_blocks[0].cidr_block
+variable "vpc_cidr_blocks" {}
+variable "subnet_cidr_blocks" {}
+variable "avail_zone" {}
+variable "env_prefix" {}
+variable "my_ip" {}
+
+resource "aws_vpc" "myapp-vpc" {
+  cidr_block = var.vpc_cidr_blocks
   tags       = {
-    Name : var.cidr_blocks[0].name
+    Name : "${var.env_prefix}-vpc"
   }
 }
 
-resource "aws_subnet" "dev-subnet-1" {
-  vpc_id            = aws_vpc.development-vpc.id
-  cidr_block        = var.cidr_blocks[1].cidr_block
+resource "aws_subnet" "myapp-subnet-1" {
+  vpc_id            = aws_vpc.myapp-vpc.id
+  cidr_block        = var.subnet_cidr_blocks
   availability_zone = var.avail_zone
   tags              = {
-    Name : var.cidr_blocks[1].name
+    Name : "${var.env_prefix}-subnet-1"
   }
 }
 
-variable "avail_zone" {}
-
-# get existing vpc
-#data "aws_vpc" "existing_vpc" {
-#  default = false
+#resource "aws_route_table" "myapp-route-table" {
+#  vpc_id = aws_vpc.myapp-vpc.id
+#  route {
+#    cidr_block = "0.0.0.0/0"
+#    gateway_id = aws_internet_gateway.myapp-igw.id
+#  }
+#  tags = {
+#    Name : "${var.env_prefix}-rtb"
+#  }
 #}
 #
-#resource "aws_subnet" "dev-subnet-2" {
-#  vpc_id            = data.aws_vpc.existing_vpc.id
-#  cidr_block        = "10.0.26.0/24"
-#  availability_zone = "eu-west-3a"
-#  tags              = {
-#    Name : "subnet-2-dev"
+resource "aws_internet_gateway" "myapp-igw" {
+  vpc_id = aws_vpc.myapp-vpc.id
+  tags   = {
+    Name : "${var.env_prefix}-igw"
+  }
+}
+
+resource "aws_default_route_table" "default-rtb" {
+  default_route_table_id = aws_vpc.myapp-vpc.default_route_table_id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.myapp-igw.id
+  }
+  tags = {
+    Name : "${var.env_prefix}-default-rtb"
+  }
+}
+
+#
+#resource "aws_route_table_association" "a-rtb-subnet" {
+#  subnet_id = aws_subnet.myapp-subnet-1.id
+#  route_table_id = aws_route_table.myapp-route-table.id
+#}
+
+#resource "aws_security_group" "myapp-sg" {
+#  name   = "myapp-sg"
+#  vpc_id = aws_vpc.myapp-vpc.id
+#
+#  ingress {
+#    from_port   = 22
+#    to_port     = 22
+#    protocol    = "tcp"
+#    cidr_blocks = [var.my_ip]
+#  }
+#
+#  ingress {
+#    from_port   = 8080
+#    to_port     = 8080
+#    protocol    = "tcp"
+#    cidr_blocks = ["0.0.0.0/0"]
+#  }
+#
+#  egress {
+#    from_port = "0"
+#    to_port = "0"
+#    protocol = "-1"
+#    cidr_blocks = ["0.0.0.0/0"]
+#    prefix_list_ids = []
+#  }
+#
+#  tags = {
+#    Name: "${var.env_prefix}-sg"
 #  }
 #}
 
-# define outputs to see created resources values
-#output "dev-vpc-id" {
-#  value = aws_vpc.development-vpc.id
-#}
-#
-#output "dev-subnet-id" {
-#  value = aws_subnet.dev-subnet-1.id
-#}
+resource "aws_default_security_group" "default-sg" {
+  vpc_id = aws_vpc.myapp-vpc.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port = "0"
+    to_port = "0"
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    prefix_list_ids = []
+  }
+
+  tags = {
+    Name: "${var.env_prefix}-default-sg"
+  }
+}
