@@ -2,10 +2,6 @@ provider "aws" {
     region = "eu-west-2"
 }
 
-variable vpc_cidr_block {}
-variable private_subnet_cidr_blocks {}
-variable public_subnet_cidr_blocks {}
-
 data "aws_availability_zones" "available" {}
 
 module "myapp-vpc" {
